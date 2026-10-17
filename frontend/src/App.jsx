@@ -7,6 +7,41 @@ const api={get:p=>req(p),post:(p,d)=>req(p,{method:'POST',body:d}),put:(p,d)=>re
 function useRemote(paths){const [data,setData]=useState({}),[loading,setLoading]=useState(false);const load=async()=>{setLoading(true);try{const result=await Promise.all(paths.map(p=>api.get(p)));setData(Object.fromEntries(paths.map((p,i)=>[p,result[i]])));}catch(e){message.error(e.message)}finally{setLoading(false)}};useEffect(()=>{load()},[]);return {data,loading,load}}
 const Status=({value})=><Tag color={value==='Released'?'green':value==='Draft'?'orange':'default'}>{value}</Tag>;
 const handle=async(fn,load)=>{try{await fn();message.success('操作成功');await load()}catch(e){message.error(e.message)}};
+function EquipmentLibrary(){
+ const {data,loading,load}=useRemote(['/equipment']);
+ const [modal,setModal]=useState(false),[current,setCurrent]=useState(null),[saving,setSaving]=useState(false),[search,setSearch]=useState('');
+ const [form]=Form.useForm();
+ const open=item=>{setCurrent(item);form.resetFields();form.setFieldsValue(item||{name:'',model:'',kind:'',chambers:[]});setModal(true)};
+ const submit=async values=>{
+   setSaving(true);
+   try{
+     const payload={...values,name:values.name.trim(),chambers:values.chambers||[]};
+     if(current)await api.put(`/equipment/${current.id}`,payload);else await api.post('/equipment',payload);
+     message.success(current?'设备已更新':'设备已新增');setModal(false);await load();
+   }catch(e){message.error(e.message)}finally{setSaving(false)}
+ };
+ const rows=(data['/equipment']||[]).filter(e=>[e.name,e.model,e.kind].some(v=>(v||'').toLowerCase().includes(search.toLowerCase())));
+ const columns=[
+   {title:'设备名称',dataIndex:'name'},
+   {title:'型号',dataIndex:'model'},
+   {title:'设备类型',dataIndex:'kind'},
+   {title:'腔室',dataIndex:'chambers',render:v=>(v||[]).join('、')||'—'},
+   {title:'操作',render:(_,item)=><Space><Button size="small" onClick={()=>open(item)}>编辑</Button><Popconfirm title="删除此设备？" description="被工序卡、Recipe 或 Inspection 引用的设备不能删除。" onConfirm={()=>handle(()=>api.del(`/equipment/${item.id}`),load)} okText="删除" cancelText="取消"><Button size="small" danger icon={<DeleteOutlined/>}>删除</Button></Popconfirm></Space>}
+ ];
+ return <>
+   <Space wrap style={{marginBottom:18}}><Button type="primary" icon={<PlusOutlined/>} onClick={()=>open(null)}>新增设备</Button><Input.Search allowClear placeholder="搜索名称、型号或类型" value={search} onChange={e=>setSearch(e.target.value)} style={{width:280}}/><Button icon={<ReloadOutlined/>} onClick={load}>刷新</Button></Space>
+   <Alert type="info" showIcon message="设备库供工序卡、Recipe 和 Inspection 选择。被引用的设备不能删除；编辑共享设备信息会影响引用它的页面展示。" style={{marginBottom:16}}/>
+   <Table rowKey="id" loading={loading} dataSource={rows} columns={columns} pagination={{pageSize:10}}/>
+   <Modal title={current?'编辑设备':'新增设备'} open={modal} onCancel={()=>setModal(false)} onOk={()=>form.submit()} confirmLoading={saving} destroyOnHidden>
+     <Form form={form} layout="vertical" onFinish={submit}>
+       <Form.Item name="name" label="设备名称" rules={[{required:true,whitespace:true,message:'请输入设备名称'}]}><Input maxLength={120}/></Form.Item>
+       <Form.Item name="model" label="型号"><Input maxLength={120}/></Form.Item>
+       <Form.Item name="kind" label="设备类型"><Input maxLength={100}/></Form.Item>
+       <Form.Item name="chambers" label="腔室"><Select mode="tags" tokenSeparators={[',','，']} placeholder="输入腔室名称后按回车"/></Form.Item>
+     </Form>
+   </Modal>
+ </>;
+}
 function Cards({refreshKey}){
  const {data,loading,load}=useRemote(['/operation-cards','/equipment']);const cards=data['/operation-cards']||[],equipment=data['/equipment']||[];
  const [current,setCurrent]=useState(null),[modal,setModal]=useState(''),[form]=Form.useForm(),[editRecipe,setEditRecipe]=useState(null),[json,setJson]=useState('{}');
@@ -452,6 +487,6 @@ function Designer({initialFlow}){
 }
 
 function Dashboard({navigate}){const {data}=useRemote(['/products','/operation-cards','/flows']);const p=data['/products']||[],c=data['/operation-cards']||[],f=data['/flows']||[];return <><Row gutter={16}>{[[p.length,'Products'],[p.reduce((n,x)=>n+x.revisions.length,0),'Revisions'],[c.length,'Operation Cards'],[f.length,'Process Flows']].map(([n,label])=><Col xs={12} md={6} key={label}><Card><Statistic title={label} value={n}/></Card></Col>)}</Row><Card title="Operation Card — 独立主数据设计" style={{marginTop:20}}><p>Product → Product Revision → Process Flow → Operation Group → Operation Step → <strong>Operation Card Version</strong></p><p>工序卡由独立 Card Library 管理；同一版本可以被多个产品的 Step 引用。Released 版本不允许覆盖，修改时 Clone Draft，再发布新版本。</p><Space><Button onClick={()=>navigate('cards')}>打开 Operation Card Library</Button><Button type="primary" onClick={()=>navigate('flow')}>打开 Flow Designer</Button></Space></Card><Card style={{marginTop:16}} title="预置 Reticle 制造流程"><p>Cleaning → ZEP520A Coating → EBPG5200 Exposure → Development → Etching → CD SEM</p><p>EBL: 100 kV / 2 nA / 120 µC/cm²；CD: 100 nm ±5 nm。</p></Card></>}
-export default function App(){const [page,setPage]=useState('dashboard'),[flowId,setFlowId]=useState(null),[rev,setRev]=useState(0);const labels={dashboard:'MES Sandbox',products:'Product Management',cards:'Operation Card Library',flow:'Process Flow Designer'};
- return <Layout style={{minHeight:'100vh'}}><Sider breakpoint="lg" collapsedWidth="0" width={245} theme="dark"><div className="logo"><DatabaseOutlined style={{marginRight:9}}/> MES Sandbox</div><Menu theme="dark" mode="inline" selectedKeys={[page]} onClick={e=>setPage(e.key)} items={[{key:'dashboard',icon:<AppstoreOutlined/>,label:'Overview'},{key:'products',icon:<DatabaseOutlined/>,label:'Product Management'},{key:'cards',icon:<AppstoreOutlined/>,label:'Operation Card Library'},{key:'flow',icon:<ApartmentOutlined/>,label:'Process Flow Designer'}]}/></Sider><Layout><Header style={{background:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 26px',borderBottom:'1px solid #e7edf4'}}><h2 className="head-title">{labels[page]}</h2><Tag color="blue">Master Data Validation</Tag></Header><Content style={{margin:'24px',maxWidth:1450}}><div className="pane">{page==='dashboard'?<Dashboard navigate={setPage}/>:page==='products'?<ProductManagement selectFlow={id=>{setFlowId(id);setPage('flow')}}/>:page==='cards'?<Cards refreshKey={rev}/>:<Designer initialFlow={flowId}/>}</div></Content></Layout></Layout>;
+export default function App(){const [page,setPage]=useState('dashboard'),[flowId,setFlowId]=useState(null),[rev,setRev]=useState(0);const labels={dashboard:'MES Sandbox',products:'Product Management',cards:'Operation Card Library',flow:'Process Flow Designer',equipment:'设备库'};
+ return <Layout style={{minHeight:'100vh'}}><Sider breakpoint="lg" collapsedWidth="0" width={245} theme="dark"><div className="logo"><DatabaseOutlined style={{marginRight:9}}/> MES Sandbox</div><Menu theme="dark" mode="inline" selectedKeys={[page]} onClick={e=>setPage(e.key)} items={[{key:'dashboard',icon:<AppstoreOutlined/>,label:'Overview'},{key:'products',icon:<DatabaseOutlined/>,label:'Product Management'},{key:'cards',icon:<AppstoreOutlined/>,label:'Operation Card Library'},{key:'equipment',icon:<DatabaseOutlined/>,label:'设备库'},{key:'flow',icon:<ApartmentOutlined/>,label:'Process Flow Designer'}]}/></Sider><Layout><Header style={{background:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 26px',borderBottom:'1px solid #e7edf4'}}><h2 className="head-title">{labels[page]}</h2><Tag color="blue">Master Data Validation</Tag></Header><Content style={{margin:'24px',maxWidth:1450}}><div className="pane">{page==='dashboard'?<Dashboard navigate={setPage}/>:page==='products'?<ProductManagement selectFlow={id=>{setFlowId(id);setPage('flow')}}/>:page==='cards'?<Cards refreshKey={rev}/>:page==='equipment'?<EquipmentLibrary/>:<Designer initialFlow={flowId}/>}</div></Content></Layout></Layout>;
 }

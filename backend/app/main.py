@@ -87,7 +87,7 @@ class VersionClone(BaseModel):
 class StatusIn(BaseModel):
     status:str
 class EquipmentIn(BaseModel):
-    name:str;model:str='';kind:str='';chambers:list[str]=Field(default_factory=list)
+    name:str=Field(min_length=1,pattern=r'\S');model:str='';kind:str='';chambers:list[str]=Field(default_factory=list)
 class RecipeIn(BaseModel):
     card_version_id:int|None=None;name:str;version:str='1.0';equipment_id:int|None=None;chamber:str='';parameters:dict=Field(default_factory=dict)
 class InspectionIn(BaseModel):
@@ -294,7 +294,12 @@ def equipment_put(id:int,data:EquipmentIn,db:Session=Depends(get_db)):
     for k,v in data.model_dump().items():setattr(e,k,v)
     return dump(save(db,e))
 @app.delete('/api/equipment/{id}')
-def equipment_delete(id:int,db:Session=Depends(get_db)):return erase(db,require(db,Equipment,id))
+def equipment_delete(id:int,db:Session=Depends(get_db)):
+    equipment=require(db,Equipment,id)
+    for model,label in [(OperationCardVersion,'工序卡版本'),(Recipe,'Recipe'),(InspectionPlan,'Inspection Plan')]:
+        if db.query(model).filter_by(equipment_id=id).first():
+            raise HTTPException(409,f'设备已被{label}引用，无法删除；请先解除引用')
+    return erase(db,equipment)
 
 for singular,model,Schema in [('recipes',Recipe,RecipeIn),('inspection-plans',InspectionPlan,InspectionIn)]:
     def make_list(M):

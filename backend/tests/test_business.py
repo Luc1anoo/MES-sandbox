@@ -49,3 +49,33 @@ def test_released_immutable_and_no_draft_bind(client):
 def test_duplicate_versions_rejected(client):
     c=client;card,v,_=setup(c)
     assert c.post(f'/api/operation-cards/{card["id"]}/versions',json={'version':'1.0'}).status_code==409
+
+
+def test_equipment_library_crud_and_validation(client):
+    c = client
+    equipment = post(c, '/equipment', {'name': 'Etcher A', 'model': 'ICP', 'kind': 'Etching', 'chambers': ['A', 'B']})
+    assert equipment in c.get('/api/equipment').json()
+    assert c.post('/api/equipment', json={'name': 'Etcher A'}).status_code == 409
+    assert c.post('/api/equipment', json={'name': '   '}).status_code == 422
+    updated = c.put(f'/api/equipment/{equipment["id"]}', json={'name': 'Etcher B', 'model': 'RIE', 'kind': 'Etching', 'chambers': ['C']})
+    assert updated.status_code == 200
+    assert updated.json()['chambers'] == ['C']
+    assert c.delete(f'/api/equipment/{equipment["id"]}').status_code == 200
+    assert c.get(f'/api/equipment/{equipment["id"]}').status_code == 404
+
+
+def test_equipment_deletion_preserves_all_reference_types(client):
+    c = client
+    card = post(c, '/operation-cards', {'code': 'EQ', 'name': 'Equipment references'})
+    for resource, payload in [
+        (f'/operation-cards/{card["id"]}/versions', {'version': '1.0'}),
+        ('/recipes', {'name': 'Etch'}),
+        ('/inspection-plans', {'name': 'Depth'}),
+    ]:
+        equipment = post(c, '/equipment', {'name': resource})
+        record = post(c, resource, {**payload, 'equipment_id': equipment['id']})
+        assert c.delete(f'/api/equipment/{equipment["id"]}').status_code == 409
+        record_resource = '/card-versions' if resource.endswith('/versions') else resource
+        assert c.get(f'/api{record_resource}/{record["id"]}').json()['equipment_id'] == equipment['id']
+        assert c.delete(f'/api{record_resource}/{record["id"]}').status_code == 200
+        assert c.delete(f'/api/equipment/{equipment["id"]}').status_code == 200
