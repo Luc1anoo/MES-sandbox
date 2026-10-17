@@ -1,0 +1,43 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Frontend dependencies and build output
+node_modules/
+frontend/dist/
+frontend/.vite/
+dist/
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local SQLite database
+**/mes.db
+**/*.db-journal
+**/*.sqlite
+**/*.sqlite3
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# IDE and operating system files
+.idea/
+.DS_Store
+Thumbs.db
