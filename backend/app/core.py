@@ -115,6 +115,7 @@ class InspectionPlan(Base):
     __tablename__='inspection_plans'
     id=Column(Integer,primary_key=True); card_version_id=Column(Integer,ForeignKey('operation_card_versions.id',ondelete='RESTRICT'),nullable=True); name=Column(String(120),nullable=False); version=Column(String(40),default='1.0'); inspection_type=Column(String(100),default=''); equipment_id=Column(Integer,ForeignKey('equipment.id',ondelete='SET NULL')); sampling_rule=Column(String(120),default=''); target=Column(Float,nullable=True); usl=Column(Float,nullable=True); lsl=Column(Float,nullable=True); unit=Column(String(40),default='nm'); frequency=Column(String(80),default='Every Lot')
     equipment=relationship('Equipment'); card_version=relationship('OperationCardVersion',back_populates='inspections')
+    items=relationship('InspectionItem', back_populates='plan', cascade='all, delete-orphan', order_by='InspectionItem.id')
 
 # Prevent mutations of approved snapshots even through ORM updates to child rows.
 @event.listens_for(Session,'before_flush')
@@ -167,7 +168,10 @@ def ensure_released(db,vid):
     return v
 
 def dump(obj):
-    return {col.name:getattr(obj,col.name) for col in obj.__table__.columns}
+    data = {col.name:getattr(obj,col.name) for col in obj.__table__.columns}
+    if isinstance(obj, InspectionPlan):
+        data['items'] = [dump(item) for item in obj.items]
+    return data
 
 def card_view(c):
     return {**dump(c),'versions':[version_view(v) for v in c.versions]}
@@ -177,3 +181,6 @@ def version_view(v):
 
 def flow_view(f):
     return {**dump(f),'groups':[{**dump(g),'steps':[{**dump(s),'card_code':s.card_version.card.code if s.card_version else None,'card_version':s.card_version.version if s.card_version else None} for s in g.steps]} for g in f.groups]}
+
+
+from . import context_models  # Register additive tables and relationships for seed/create_all.

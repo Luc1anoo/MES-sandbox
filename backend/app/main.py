@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, func
 from .core import *
+from .context_models import InspectionItem
 
 @asynccontextmanager
 async def lifespan(app):
@@ -266,7 +267,7 @@ def version_clone(id:int,data:VersionClone,db:Session=Depends(get_db)):
         sop_url=old.sop_url,
     )
     for r in old.recipes:new.recipes.append(Recipe(name=r.name,version=r.version,equipment_id=r.equipment_id,chamber=r.chamber,parameters=dict(r.parameters or {})))
-    for p in old.inspections:new.inspections.append(InspectionPlan(name=p.name,version=p.version,inspection_type=p.inspection_type,equipment_id=p.equipment_id,sampling_rule=p.sampling_rule,target=p.target,usl=p.usl,lsl=p.lsl,unit=p.unit,frequency=p.frequency))
+    for p in old.inspections:new.inspections.append(InspectionPlan(name=p.name,version=p.version,inspection_type=p.inspection_type,equipment_id=p.equipment_id,sampling_rule=p.sampling_rule,target=p.target,usl=p.usl,lsl=p.lsl,unit=p.unit,frequency=p.frequency,items=[InspectionItem(**{k:v for k,v in dump(item).items() if k not in ('id','inspection_plan_id')}) for item in p.items]))
     return version_view(save(db,new))
 @app.delete('/api/card-versions/{id}')
 def version_delete(id:int,db:Session=Depends(get_db)):
@@ -340,3 +341,7 @@ def clone_revision(id:int,data:VersionClone,db:Session=Depends(get_db)):
             for s in g.steps:ng.steps.append(OperationStep(name=s.name,sequence=s.sequence,card_version_id=s.card_version_id))
     save(db,rev)
     return dump(rev)
+
+
+from .context_api import router as context_router
+app.include_router(context_router)
