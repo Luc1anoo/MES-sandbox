@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useState} from 'react';
 import {Layout,Menu,Typography,Card,Table,Button,Space,Tag,Select,Input,InputNumber,Modal,Form,message,Descriptions,Drawer,Tabs,Popconfirm,Tree,Row,Col,Statistic,Divider,Empty,Alert, Collapse} from 'antd';
 import {ApartmentOutlined,AppstoreOutlined,DatabaseOutlined,ReloadOutlined,PlusOutlined,CopyOutlined,CheckCircleOutlined,DeleteOutlined} from '@ant-design/icons';
+import {cardRows} from './cardRows.js';
 const {Sider,Content,Header}=Layout;
 const req=async(path,options={})=>{let r;try{r=await fetch('/api'+path,{headers:{'Content-Type':'application/json'},...options,body:options.body?JSON.stringify(options.body):undefined});}catch(e){throw new Error('无法连接后端，请启动 FastAPI（8000 端口）');}let data=await r.json().catch(()=>null);if(!r.ok)throw new Error(typeof data?.detail==='string'?data.detail:'HTTP '+r.status);return data};
 const api={get:p=>req(p),post:(p,d)=>req(p,{method:'POST',body:d}),put:(p,d)=>req(p,{method:'PUT',body:d}),del:p=>req(p,{method:'DELETE'})};
@@ -45,9 +46,9 @@ function EquipmentLibrary(){
 function Cards({refreshKey}){
  const {data,loading,load}=useRemote(['/operation-cards','/equipment']);const cards=data['/operation-cards']||[],equipment=data['/equipment']||[];
  const [current,setCurrent]=useState(null),[modal,setModal]=useState(''),[form]=Form.useForm(),[editRecipe,setEditRecipe]=useState(null),[json,setJson]=useState('{}');
- useEffect(()=>{if(refreshKey)load()},[refreshKey]);const rows=cards.flatMap(c=>c.versions.map(v=>({...v,code:c.code,name:c.name,card_id:c.id,card_name:c.name})));const selected=rows.find(r=>r.id===current?.id)||current;
+ useEffect(()=>{if(refreshKey)load()},[refreshKey]);const rows=cardRows(cards);const selected=rows.find(r=>r.key===current?.key)||current;
  const open=(mode,initial={})=>{setModal(mode);form.resetFields();form.setFieldsValue(initial)};
- const submit=async v=>{let p;
+ const submit=async v=>{try{let p;
    if(modal==='newCard')p=api.post('/operation-cards',v);
    if(modal==='newVersion')p=api.post(`/operation-cards/${selected.card_id}/versions`,v);
    if(modal==='clone')p=api.post(`/card-versions/${selected.id}/clone`,{version:v.version});
@@ -56,14 +57,23 @@ function Cards({refreshKey}){
    if(modal==='newInspection')p=api.post('/inspection-plans',{...v,card_version_id:selected.id,equipment_id:v.equipment_id||null});
    if(modal==='editRecipe')p=api.put(`/recipes/${editRecipe.id}`,{...editRecipe,parameters:JSON.parse(json)});
    if(modal==='newCard' && !v.code)p=Promise.reject(new Error('Card Code 必填'));
-   await handle(()=>p,load);setModal('')
+   const result=await p;
+   if(modal==='newCard'){
+     setCurrent(cardRows([result])[0]);
+     form.resetFields();setModal('newVersion');
+   }else{
+     if(modal==='newVersion'||modal==='clone')setCurrent({...result,key:`version-${result.id}`,card_id:selected.card_id,code:selected.code,name:selected.name});
+     setModal('');
+   }
+   message.success('操作成功');await load();
+ }catch(e){message.error(e.message)}
  };
- const cols=[{title:'Card Code',dataIndex:'code',render:v=><span className="cardcode">{v}</span>},{title:'Operation Card',dataIndex:'name'},{title:'Version',dataIndex:'version'},{title:'Status',dataIndex:'status',render:v=><Status value={v}/>},{title:'Recipe',render:(_,r)=>r.recipes.map(x=>x.name).join(', ')||'—'},{title:'Inspection',render:(_,r)=>r.inspections.map(x=>x.name).join(', ')||'—'},{title:'Actions',render:(_,r)=><Button size="small" onClick={()=>setCurrent(r)}>详情</Button>}];
+ const cols=[{title:'Card Code',dataIndex:'code',render:v=><span className="cardcode">{v}</span>},{title:'Operation Card',dataIndex:'name'},{title:'Version',dataIndex:'version',render:v=>v||'尚无版本'},{title:'Status',dataIndex:'status',render:v=>v?<Status value={v}/>:<Tag>待创建版本</Tag>},{title:'Recipe',render:(_,r)=>r.recipes.map(x=>x.name).join(', ')||'—'},{title:'Inspection',render:(_,r)=>r.inspections.map(x=>x.name).join(', ')||'—'},{title:'Actions',render:(_,r)=><Button size="small" onClick={()=>{setCurrent(r);if(!r.id)open('newVersion')}}>{r.id?'详情':'创建首个版本'}</Button>}];
  return <><Space style={{marginBottom:18}}><Button icon={<PlusOutlined/>} type="primary" onClick={()=>open('newCard')}>创建工序卡</Button><Button icon={<ReloadOutlined/>} onClick={load}>刷新</Button></Space>
- <Table loading={loading} dataSource={rows} rowKey="id" columns={cols} pagination={{pageSize:10}}/>
+ <Table loading={loading} dataSource={rows} rowKey="key" columns={cols} pagination={{pageSize:10}}/>
  <Card title="工序卡库（独立主数据）" size="small"><Typography.Text type="secondary">卡版本是不可变的制造参数快照；产品工序只引用已发布版本的 ID。创建新版本不会修改旧产品流程。</Typography.Text></Card>
- <Drawer width={620} title={`${selected?.code||''} — ${selected?.version||''}`} open={!!selected&&!modal} onClose={()=>setCurrent(null)} extra={<Space><Button onClick={()=>open('clone')}>复制新版本</Button><Button onClick={()=>open('newVersion')}>空白版本</Button></Space>}>
-  {selected&&<><Descriptions column={2} bordered size="small" items={[{key:'v',label:'Version',children:selected.version},{key:'s',label:'Status',children:<Status value={selected.status}/>},{key:'m',label:'Material',children:selected.material_type||'—'},{key:'sub',label:'Substrate',children:selected.substrate_type||'—'},
+ <Drawer width={620} title={`${selected?.code||''} — ${selected?.version||''}`} open={!!selected?.id&&!modal} onClose={()=>setCurrent(null)} extra={<Space><Button onClick={()=>open('clone')}>复制新版本</Button><Button onClick={()=>open('newVersion')}>空白版本</Button></Space>}>
+  {selected?.id&&<><Descriptions column={2} bordered size="small" items={[{key:'v',label:'Version',children:selected.version},{key:'s',label:'Status',children:<Status value={selected.status}/>},{key:'m',label:'Material',children:selected.material_type||'—'},{key:'sub',label:'Substrate',children:selected.substrate_type||'—'},
 { key: 'owner', label: '工序责任人', children: selected.responsible_person || '—' },
 { key: 'equipment', label: '设备', children: equipment.find(e => e.id === selected.equipment_id)?.name || '—' },
 { key: 'tooling', label: '工装要求', span: 2, children: selected.tooling_requirement || '—' },
