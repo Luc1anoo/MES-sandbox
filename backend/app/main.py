@@ -345,3 +345,6 @@ def clone_revision(id:int,data:VersionClone,db:Session=Depends(get_db)):
 
 from .context_api import router as context_router
 app.include_router(context_router)
+
+from .workorders import router as workorder_router
+app.include_router(workorder_router)

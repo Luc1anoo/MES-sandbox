@@ -2,7 +2,7 @@ async function req(path, options = {}) {
   let response;
   try {
     response = await fetch('/api' + path, {
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', ...(localStorage.getItem('wo_token') ? {Authorization:'Bearer '+localStorage.getItem('wo_token')}: {})},
       ...options,
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
     });

@@ -184,3 +184,5 @@ def flow_view(f):
 
 
 from . import context_models  # Register additive tables and relationships for seed/create_all.
+
+from . import workorders  # Register additive request-work-order tables.

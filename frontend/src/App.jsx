@@ -5,6 +5,7 @@ import {cardRows} from './cardRows.js';
 const {Sider,Content,Header}=Layout;
 import {api} from './api.js';
 import ContextManagement from './ContextManagement.jsx';
+import Workorders,{useOrderTickets} from './Workorders.jsx';
 function useRemote(paths){const [data,setData]=useState({}),[loading,setLoading]=useState(false);const load=async()=>{setLoading(true);try{const result=await Promise.all(paths.map(p=>api.get(p)));setData(Object.fromEntries(paths.map((p,i)=>[p,result[i]])));}catch(e){message.error(e.message)}finally{setLoading(false)}};useEffect(()=>{load()},[]);return {data,loading,load}}
 const Status=({value})=><Tag color={value==='Released'?'green':value==='Draft'?'orange':'default'}>{value}</Tag>;
 const handle=async(fn,load)=>{try{await fn();message.success('操作成功');await load()}catch(e){message.error(e.message)}};
@@ -173,6 +174,7 @@ function Designer({initialFlow}){
  },[flows.length]);
 
  const flow=flows.find(f=>f.id===flowId);
+ const tickets=useOrderTickets(flowId);
 
  const refOptions=cards.flatMap(c=>
    c.versions
@@ -300,6 +302,7 @@ function Designer({initialFlow}){
      </Button>
    </Space>
 
+   <div style={{marginBottom:16}}>{tickets.selector}</div>
    {!flow ? (
      <Empty description="请先在 Product Management 创建 Flow"/>
    ) : (
@@ -375,7 +378,7 @@ function Designer({initialFlow}){
                   <div>
 
                     <strong>
-                      STEP {s.sequence}: {s.name}
+                      STEP {s.sequence}: {s.name} {tickets.badge(s.id)}
                     </strong>
 
                     <div className="small">
@@ -497,6 +500,6 @@ function Designer({initialFlow}){
 }
 
 function Dashboard({navigate}){const {data}=useRemote(['/products','/operation-cards','/flows']);const p=data['/products']||[],c=data['/operation-cards']||[],f=data['/flows']||[];return <><Row gutter={16}>{[[p.length,'Products'],[p.reduce((n,x)=>n+x.revisions.length,0),'Revisions'],[c.length,'Operation Cards'],[f.length,'Process Flows']].map(([n,label])=><Col xs={12} md={6} key={label}><Card><Statistic title={label} value={n}/></Card></Col>)}</Row><Card title="Operation Card — 独立主数据设计" style={{marginTop:20}}><p>Product → Product Revision → Process Flow → Operation Group → Operation Step → <strong>Operation Card Version</strong></p><p>工序卡由独立 Card Library 管理；同一版本可以被多个产品的 Step 引用。Released 版本不允许覆盖，修改时 Clone Draft，再发布新版本。</p><Space><Button onClick={()=>navigate('cards')}>打开 Operation Card Library</Button><Button type="primary" onClick={()=>navigate('flow')}>打开 Flow Designer</Button></Space></Card><Card style={{marginTop:16}} title="预置 Reticle 制造流程"><p>Cleaning → ZEP520A Coating → EBPG5200 Exposure → Development → Etching → CD SEM</p><p>EBL: 100 kV / 2 nA / 120 µC/cm²；CD: 100 nm ±5 nm。</p></Card></>}
-export default function App(){const [page,setPage]=useState('dashboard'),[flowId,setFlowId]=useState(null),[rev,setRev]=useState(0);const labels={dashboard:'MES Sandbox',products:'Product Management',cards:'Operation Card Library',flow:'Process Flow Designer',equipment:'Equipment Library',recipeContexts:'Recipe Context',inspectionContexts:'Inspection Plan Context'};
- return <Layout style={{minHeight:'100vh'}}><Sider breakpoint="lg" collapsedWidth="0" width={245} theme="dark"><div className="logo"><DatabaseOutlined style={{marginRight:9}}/> MES Sandbox</div><Menu theme="dark" mode="inline" selectedKeys={[page]} onClick={e=>setPage(e.key)} items={[{key:'dashboard',icon:<AppstoreOutlined/>,label:'Overview'},{key:'products',icon:<DatabaseOutlined/>,label:'Product Management'},{key:'cards',icon:<AppstoreOutlined/>,label:'Operation Card Library'},{key:'equipment',icon:<DatabaseOutlined/>,label:'Equipment Library'},{key:'contexts',icon:<DatabaseOutlined/>,label:'Context Management',children:[{key:'recipeContexts',label:'Recipe Context'},{key:'inspectionContexts',label:'Inspection Plan Context'}]},{key:'flow',icon:<ApartmentOutlined/>,label:'Process Flow Designer'}]}/></Sider><Layout><Header style={{background:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 26px',borderBottom:'1px solid #e7edf4'}}><h2 className="head-title">{labels[page]}</h2><Tag color="blue">Master Data Validation</Tag></Header><Content style={{margin:'24px',maxWidth:1450}}><div className="pane">{page==='dashboard'?<Dashboard navigate={setPage}/>:page==='products'?<ProductManagement selectFlow={id=>{setFlowId(id);setPage('flow')}}/>:page==='cards'?<Cards refreshKey={rev}/>:page==='recipeContexts'?<ContextManagement key="recipe" kind="recipe"/>:page==='inspectionContexts'?<ContextManagement key="inspection" kind="inspection"/>:page==='equipment'?<EquipmentLibrary/>:<Designer initialFlow={flowId}/>}</div></Content></Layout></Layout>;
+export default function App(){const [page,setPage]=useState(()=>new URLSearchParams(location.search).has('workorder')?'workorders':'dashboard'),[flowId,setFlowId]=useState(null),[rev,setRev]=useState(0);const labels={dashboard:'MES Sandbox',products:'Product Management',cards:'Operation Card Library',flow:'Process Flow Designer',equipment:'Equipment Library',recipeContexts:'Recipe Context',inspectionContexts:'Inspection Plan Context',workorders:'需求工单中心'};
+ return <Layout style={{minHeight:'100vh'}}><Sider breakpoint="lg" collapsedWidth="0" width={245} theme="dark"><div className="logo"><DatabaseOutlined style={{marginRight:9}}/> MES Sandbox</div><Menu theme="dark" mode="inline" selectedKeys={[page]} onClick={e=>setPage(e.key)} items={[{key:'dashboard',icon:<AppstoreOutlined/>,label:'Overview'},{key:'products',icon:<DatabaseOutlined/>,label:'Product Management'},{key:'cards',icon:<AppstoreOutlined/>,label:'Operation Card Library'},{key:'workorders',icon:<DatabaseOutlined/>,label:'需求工单中心'},{key:'equipment',icon:<DatabaseOutlined/>,label:'Equipment Library'},{key:'contexts',icon:<DatabaseOutlined/>,label:'Context Management',children:[{key:'recipeContexts',label:'Recipe Context'},{key:'inspectionContexts',label:'Inspection Plan Context'}]},{key:'flow',icon:<ApartmentOutlined/>,label:'Process Flow Designer'}]}/></Sider><Layout><Header style={{background:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',padding:'0 26px',borderBottom:'1px solid #e7edf4'}}><h2 className="head-title">{labels[page]}</h2><Tag color="blue">Master Data Validation</Tag></Header><Content style={{margin:'24px',maxWidth:1450}}><div className="pane">{page==='dashboard'?<Dashboard navigate={setPage}/>:page==='products'?<ProductManagement selectFlow={id=>{setFlowId(id);setPage('flow')}}/>:page==='cards'?<Cards refreshKey={rev}/>:page==='recipeContexts'?<ContextManagement key="recipe" kind="recipe"/>:page==='inspectionContexts'?<ContextManagement key="inspection" kind="inspection"/>:page==='workorders'?<Workorders/>:page==='equipment'?<EquipmentLibrary/>:<Designer initialFlow={flowId}/>}</div></Content></Layout></Layout>;
 }
